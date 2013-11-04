@@ -1,0 +1,15 @@
+---
+
+development:
+  pattern: single-host #two-tier-ref
+  management: script
+  script: scripts/drupal.sh
+  packages: [emacs, telnet, ruby, rubygems, ruby-devel, gcc, gcc-c++, puppet] 
+    
+#  SiteEMail: robparrott@gmail.com
+#  SiteAdmin: admin
+#  SitePassword: Passw0rd
+  KeyName: parrott-ec2
+  ConfigMgmtGitRepo: https://github.com/robparrott/puppet-drupal.git
+  ConfigMgmtGitRepoBranch: master
+    
