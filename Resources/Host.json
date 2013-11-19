@@ -1,35 +1,35 @@
 {#
 
    Single Host server managed via puppet.
-   
+
    TODO: update
-   
+
    Expects the following params:
    - GitRepo: puppet git repo to checkout and apply
    - GitRepoBranch: branch of above
    - ExtraPkgs: extra RPM packages to install
    - InstanceCount: number of desired instances
    - InstanceType
-   
+
    Expects the following objects:
    - PrivateSubnet
    - PublicElasticLoadBalancer
    - PublicLoadBalancerSecurityGroup
    - BastionHostSecurityGroup
-   
+
 #}
 
 {# ****  General host on EC2, in or out of a VPC **** #}
 
     {%- macro host(
-                    name, 
-                    ports=80, 
-                    subnet=None, 
-                    elb=None, 
-                    elb2=None, 
+                    name,
+                    ports=80,
+                    subnet=None,
+                    elb=None,
+                    elb2=None,
                     public_hostname=None,
-                    rds=None, 
-                    bucket=None, 
+                    rds=None,
+                    bucket=None,
                     public_bucket=None,
                     public='no'
                   ) -%}
@@ -57,15 +57,15 @@
       }
     },
 
- {% if bucket is not none  %}   
+ {% if bucket is not none  %}
     "{{ name }}BucketPolicy" : {
       "Type" : "AWS::S3::BucketPolicy",
       "Properties" : {
         "PolicyDocument": {
           "Id":"PrivateBucketPolicy",
-          "Statement":[  
-          	
-            {% if public_bucket is not none and public_bucket == true %} 
+          "Statement":[
+
+            {% if public_bucket is not none and public_bucket == true %}
             {
 	          "Sid":"AddPerm",
               "Effect":"AnonymousRead",
@@ -105,7 +105,7 @@
     "{{ name }}SecurityGroup" : {
       "Type" : "AWS::EC2::SecurityGroup",
       "Properties" : {
-        {% if subnet is not none  %}"VpcId" : { "Ref" : "VPC" },{% endif %} 
+        {% if subnet is not none  %}"VpcId" : { "Ref" : "VPC" },{% endif %}
         "GroupDescription" : "Security group with access for {{ ports }}",
         "SecurityGroupIngress" : [
           {% for p in ports %}
@@ -113,53 +113,81 @@
           {% endfor %}
           {"IpProtocol" : "tcp", "FromPort" : "22",  "ToPort" : "22",  "CidrIp" : { "Ref" : "SSHAccessRange"}}
         ]
-      }      
-    },  
+      }
+    },
 
     {% if public != 'no' or subnet is none  %}
     "{{ name }}Endpoint" : {
       "Type" : "AWS::EC2::EIP",
       "Properties" : {
-        "InstanceId" : { 
-          {% if subnet is not none %}"Domain" : "vpc",{% endif %}        
-          "Ref" : "{{ name }}Instance" 
+        "InstanceId" : {
+          {% if subnet is not none %}"Domain" : "vpc",{% endif %}
+          "Ref" : "{{ name }}Instance"
         }
       }
     },
-    {% endif %}     
- 
-       
-    "{{ name }}Instance": {  
+    {% endif %}
+
+
+    "{{ name }}Instance": {
       "Type" : "AWS::EC2::Instance",
       "Metadata" : {
-        "Comment" : "Single host.",      
+        "Comment" : "Single host.",
         "AWS::CloudFormation::Init" : {
-          "config" : {                  
+          "config" : {
+            "sources" : {
+              "/var/lib/nepho" : {"Ref": "PayloadURL"}
+            },
+            "commands": {
+              "0-set-permissions": {
+                "command": "chmod +x hooks/*",
+                "cwd": "/var/lib/nepho",
+                "ignoreErrors": "true"
+              },
+              "1-bootstrap": {
+                "command": "hooks/bootstrap",
+                "cwd": "/var/lib/nepho",
+                "test": "test -e /var/lib/nepho/hooks/bootstrap",
+                "ignoreErrors": "true"
+              },
+              "2-configure": {
+                "command": "hooks/configure",
+                "cwd": "/var/lib/nepho",
+                "test": "test -e hooks/configure",
+                "ignoreErrors": "true"
+              },
+              "3-deploy": {
+                "command": "hooks/deploy",
+                "cwd": "/var/lib/nepho",
+                "test": "test -e hooks/deploy",
+                "ignoreErrors": "true"
+              }
+            },
             "packages" : {
               "yum" : {
                 {% for pkg in packages %}
                 "{{ pkg }}" : [],
-                {% endfor %}  
+                {% endfor %}
                 {% if management == 'puppet' %}
                 "ruby"            : [],
                 "rubygems"        : [],
                 "ruby-devel"      : [],
                 "gcc"             : [],
                 "gcc-c++"         : [],
-                {% endif %}   
+                {% endif %}
                 {% if bucket is not none %}
                 "fuse"         : [],
                 "fuse-libs"    : [],
                 "python-pip"   : [],
-                {% endif %}                       
+                {% endif %}
                 "curl"         : [],
                 "wget"         : [],
-                "git"              : []        
+                "git"              : []
               }
             },
-                 
+
             "files" : {
-              {% if management == 'none' %} 
+              {% if management == 'none' %}
               "/var/www/html/index.html" : {
                 "content" : { "Fn::Join" : ["\n", [
                   "<img src=\"https://s3.amazonaws.com/cloudformation-examples/cloudformation_graphic.png\" alt=\"AWS CloudFormation Logo\"/>",
@@ -182,7 +210,7 @@
                 "owner"   : "root",
                 "group"   : "root"
               },
-              
+
               "/etc/profile.d/aws.sh" : {
                 "content" : { "Fn::Join" : ["", [
                   "AWS_CONFIG_FILE=/etc/aws/credentials\n",
@@ -192,7 +220,7 @@
                 "owner"   : "root",
                 "group"   : "root"
               },
-                                            
+
               "/etc/cfn/cfn-credentials" : {
                 "content" : { "Fn::Join" : ["", [
                   "AWSAccessKeyId=", { "Ref" : "{{ name }}Keys" }, "\n",
@@ -228,7 +256,7 @@
               }
             }
 
-            {% if management == 'none' %}            
+            {% if management == 'none' %}
             ,
             "services" : {
               "sysvinit" : {
@@ -242,7 +270,7 @@
             {% endif %}
           }
         }
-      },      
+      },
 
       "Properties": {
         "ImageId" : { "Fn::FindInMap" : [ "AWSRegionArch2AMI", { "Ref" : "AWS::Region" }, { "Fn::FindInMap" : [ "AWSInstanceType2Arch", { "Ref" : "InstanceType" }, "Arch" ] } ] },
@@ -254,15 +282,15 @@
         "SecurityGroupIds" : [ {"Ref" : "{{ name }}SecurityGroup"} ],
         {% else %}
         "SecurityGroups" : [ {"Ref" : "{{ name }}SecurityGroup"} ],
-        {% endif %}        
-        "KeyName"        : { "Ref" : "KeyName" },    
+        {% endif %}
+        "KeyName"        : { "Ref" : "KeyName" },
         "UserData"       : { "Fn::Base64" : { "Fn::Join" : ["", [
-        
+
           "#!/bin/bash -v\n",
 
           {# **** Inject CF values into the environment **** #}
-                    
-          "# Establish CF values and objects into script variables.\n",         
+
+          "# Establish CF values and objects into script variables.\n",
 
           "export CF_STACK_NAME='",   { "Ref" : "AWS::StackName" }, "'\n",
           "export CF_REGION='",       { "Ref" : "AWS::Region" }, "'\n",
@@ -270,12 +298,12 @@
           "export CF_ACCESS_KEY='",   { "Ref" : "{{ name }}Keys" }, "'\n",
           "export CF_SECRET_KEY='",   {"Fn::GetAtt": ["{{ name }}Keys", "SecretAccessKey"]}, "'\n",
           "export CF_WAIT_HANDLE='",  { "Ref" : "{{ name }}WaitHandle" }, "'\n",
-                    
+
           {# **** Inject environment variables about the deployment **** #}
 
 	        "# Inject some NEPHO_* platform variables\n",
 
-		  
+
           "export NEPHO_INSTANCE_ROLE='",     { "Ref" : "{{ name }}InstanceRole" }, "'\n",
           {% if elb is not none  %}
           "export NEPHO_FORWARD_HOSTNAME='", { "Fn::GetAtt" : [ "{{ elb }}", "DNSName" ]}, "'\n",
@@ -283,30 +311,30 @@
           {% endif %}
           {% if elb2 is not none  %}
           "export NEPHO_BACKEND_HOSTNAME='", { "Fn::GetAtt" : [ "{{ elb2 }}", "DNSName" ]}, "'\n",
-          {% endif %} 	  
+          {% endif %}
           {% if public_hostname is not none %}
-          "export NEPHO_PUBLIC_HOSTNAME='", {{ public_hostname }}, "'\n", 
+          "export NEPHO_PUBLIC_HOSTNAME='", {{ public_hostname }}, "'\n",
           {% endif %}
           "export NEPHO_EXTERNAL_HOSTNAME=${NEPHO_PUBLIC_HOSTNAME}\n",
-		  
+
 		      {% if rds is not none  %}
 	     	  "export NEPHO_DATABASE_HOST='",     { "Fn::GetAtt": [ "{{ rds }}", "Endpoint.Address" ] }, "'\n",
 	     	  "export NEPHO_DATABASE_PORT='",     { "Fn::GetAtt": [ "{{ rds }}", "Endpoint.Port" ] }, "'\n",
 	     	  "export NEPHO_DATABASE_NAME='",     { "Ref" : "DBName" }, "'\n",
-	     	  "export NEPHO_DATABASE_USER='",     { "Ref" : "DBUsername" }, "'\n",	  
-	     	  "export NEPHO_DATABASE_PASSWORD='", { "Ref" : "DBPassword" }, "'\n",	  
-	     	  "export NEPHO_DATABASE_CONNECT_STRING='", { "Fn::Join": [ 
+	     	  "export NEPHO_DATABASE_USER='",     { "Ref" : "DBUsername" }, "'\n",
+	     	  "export NEPHO_DATABASE_PASSWORD='", { "Ref" : "DBPassword" }, "'\n",
+	     	  "export NEPHO_DATABASE_CONNECT_STRING='", { "Fn::Join": [
 		            "", [ "mysql://",
                           { "Ref" : "DBUsername" },
-                          ":",      
-                          { "Ref" : "DBPassword" },       
-                          "@",                               
+                          ":",
+                          { "Ref" : "DBPassword" },
+                          "@",
                           { "Fn::GetAtt": [ "{{ rds }}", "Endpoint.Address" ] },
                           ":",
                           { "Fn::GetAtt": [ "{{ rds }}", "Endpoint.Port" ] },
                           "/",
                           { "Ref": "DBName" }
-                       ]]}, "'\n", 
+                       ]]}, "'\n",
 
      	    {% endif %}
 		      "export NEPHO_SES_SMTP='",          { "Ref" : "SESSMTP" }, "'\n",
@@ -321,7 +349,7 @@
           "export NEPHO_S3_BUCKET_ACCESS='",  { "Ref" : "{{ name }}Keys" },  "'\n",
           "export NEPHO_S3_BUCKET_KEY='",   {"Fn::GetAtt": ["{{ name }}Keys", "SecretAccessKey"]},  "'\n",
           {% endif %}
-		 
+
           {% if management !='script' and management != 'none' %}
           "export NEPHO_GIT_REPO_URL='",    { "Ref" : "ConfigMgmtGitRepo" }, "'\n",
           "export NEPHO_GIT_REPO_BRANCH='", { "Ref" : "ConfigMgmtGitRepoBranch" }, "'\n",
@@ -330,32 +358,36 @@
           "export NEPHO_BASE64_CONFIGS='{{ configs }}'\n",
           "export NEPHO_CONFIGS=$( echo ${NEPHO_BASE64_CONFIGS} | base64 --decode )\n",
 
-                          
-          {#  **** Include script snippets here ...  **** #}
-      
-          {% for line in scripts.cf_pre_script  %}
-          {{ line }}, {% endfor %}  
-          
-          {% for line in scripts.cf_init_script %}
-          {{ line }}, {% endfor %}  
+          {#  Run cfn-init and cfn-signal #}
+          "CF_LOG_FILE=/var/log/cfn-init.log\n",
+          "/opt/aws/bin/cfn-init -v --stack ${CF_STACK_NAME} --resource ${CF_RESOURCE} --access-key ${CF_ACCESS_KEY} --secret-key ${CF_SECRET_KEY}  --region ${CF_REGION} >> ${CF_LOG_FILE} 2>&1 || error_exit $(<${CF_LOG_FILE})\n",
+          "/opt/aws/bin/cfn-signal -e $? -r ${CF_RESOURCE} \"${CF_WAIT_HANDLE}\"\n",
 
- 
           {#  **** Include script snippets here ...  **** #}
-          
+
+          {% for line in scripts.cf_pre_script  %}
+          {{ line }}, {% endfor %}
+
+          {% for line in scripts.cf_init_script %}
+          {{ line }}, {% endfor %}
+
+
+          {#  **** Include script snippets here ...  **** #}
+
           {% for line in scripts.management %} {{ line }},
-          {% endfor %}  
+          {% endfor %}
 
           {% for line in scripts.cf_post_script %} {{ line }},
-          {% endfor %}  
+          {% endfor %}
 
           ""
         ]]}}
 
-      }       
+      }
     },
 
 
-    
+
     "{{ name }}WaitHandle" : {
       {% if subnet is not none  %}"DependsOn" : "NATIPAddress",{% endif %}
       "Type" : "AWS::CloudFormation::WaitConditionHandle"
@@ -370,4 +402,4 @@
       }
     }
 
-    {%- endmacro %}     
+    {%- endmacro %}
