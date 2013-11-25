@@ -41,11 +41,11 @@
       "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
     },
 
-    "PayloadURL": {
-      "Default" : "http://(none)/",
-      "Description" : "The URL of a payload file to expand into /var/lib/nepho",
-      "Type": "String"
-    },
+    {# Internal parameters used by Nepho AWS provider #}
+    "PayloadURL":         { "Type": "String" },
+    "AWSAccessKeyID":     { "Type": "String" },
+    "AWSSecretAccessKey": { "Type": "String" },
+    "AWSRegion":          { "Type": "String" },
 
     "ConfigMgmtGitRepo": {
       "Default" : "http://(none)/",
