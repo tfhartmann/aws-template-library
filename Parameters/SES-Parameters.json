@@ -1,14 +1,12 @@
 {#
+  A typical set of parameters relevant to Amazon SES.
 
-    A typical set of parameters relevant to Amazon SES.
-
-    Parameters:
-
-    - SESSMTP: enable SES SMTP sending?.
-    - SESEndpoint: hostname of the SES SMTP endpoint.
-    - SESPort: TCP port to use when sending SES mail (default "25")
-    - SESUsername: username of the SES SMTP account.
-    - SESPassword: password of the SES SMTP account.
+  Parameters:
+  - SESSMTP: whether to enable SES SMTP sending (default: false)
+  - SESEndpoint: hostname of the SES SMTP endpoint
+  - SESPort: TCP port to use when sending SES mail (default: 25)
+  - SESUsername: username of the SES SMTP account
+  - SESPassword: password of the SES SMTP account
 #}
 
     "SESSMTP": {
